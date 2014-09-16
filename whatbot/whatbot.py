@@ -4,6 +4,8 @@
 from collections import namedtuple
 from pprint import pprint
 from time import time, sleep
+from datetime import datetime
+from datetime import timedelta
 import requests
 import random
 import re
@@ -36,7 +38,7 @@ class WhatBot(object):
         self._autolike_poll_history = {}
 
         config = ConfigParser.ConfigParser()
-        config.read(['whatbot.conf'])
+        config.read(['/home/ubuntu/TestWTF/whatbot/whatbot.conf'])
         self._config = config
 
     def run(self):
@@ -55,7 +57,8 @@ class WhatBot(object):
 
         if (
             self._config.getboolean('Features', 'SignatureGuy') or
-            self._config.getboolean('Features', 'TransferPost')
+            self._config.getboolean('Features', 'TransferPost') or 
+	    self._config.getboolean('Features', 'DiscoBot')
         ):
             self._bus_register("/notification/%d" % my_uid, self._notif_mentioned)
             self._handle_notifications()
@@ -176,6 +179,34 @@ class WhatBot(object):
                 self._handle_mention_sigguy(mention)
             if self._config.getboolean('Features', 'TransferPost'):
                 self._handle_mention_transfer(mention)
+	    if self._config.getboolean('Features', 'DiscoBot'):
+		self._handle_mention_disco(mention)
+
+    def _handle_mention_disco(self, mention):
+	print u"Replying to %s in topic %d, post %d" % (mention.username, mention.topic_id, mention.post_number)
+
+	print u"Looking up Discobugs"
+	result = self._get("/category/meta/bug/l/latest.json?order=created&ascending=false")
+	topiclist = result[u'topic_list'][u'topics']
+	createdat = topiclist[0][u'created_at']
+	splittime, splittrash = createdat.split('.')
+	lastbug = datetime.strptime(splittime, '%Y-%m-%dT%H:%M:%S')
+	adjustedtime = datetime.now() - timedelta(hours=4)
+	difference = adjustedtime - lastbug
+	if self._nbsp_count < 26:
+	    message = "Days Since Last Bug: " + str(difference.days) + u"<t%dp%d>" % (mention.topic_id, mention.post_number)
+	else:
+	    message = "Last day without Discourse Bugs: <i>null</i> " + u"<t%dp%d>" % (mention.topic_id, mention.post_number)
+
+
+	self._nbsp_count = (self._nbsp_count + 2) % 50
+        print u"Sending reply"
+	self._reply_to(mention.topic_id, mention.post_number, message)
+
+        print u"Marking as read"
+        self._mark_as_read(mention.topic_id, mention.post_number)
+
+	sleep(4)
 
     def _handle_mention_sigguy(self, mention):
         print u"Replying to %s in topic %d, post %d" % (mention.username,
@@ -314,4 +345,4 @@ class WhatBot(object):
                 return
 
 if __name__ == '__main__':
-    WhatBot().run()
+	WhatBot().run()
